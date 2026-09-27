@@ -28,10 +28,12 @@ export default function ArenaClash({
   totalDuels = 25
 }) {
   const [countdown, setCountdown] = useState(4);
+  const hasAdvancedRef = useRef(false);
 
   // Auto-advance countdown when revealed
   useEffect(() => {
     if (roundStatus !== 'revealed') {
+      hasAdvancedRef.current = false;
       setCountdown(4);
       return;
     }
@@ -39,7 +41,10 @@ export default function ArenaClash({
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          onNextRound();
+          if (!hasAdvancedRef.current) {
+            hasAdvancedRef.current = true;
+            onNextRound();
+          }
           return 0;
         }
         return prev - 1;
@@ -47,6 +52,13 @@ export default function ArenaClash({
     }, 1000);
     return () => clearInterval(timer);
   }, [roundStatus, onNextRound]);
+
+  const handleNextDuelClick = () => {
+    if (hasAdvancedRef.current) return;
+    hasAdvancedRef.current = true;
+    sounds.playSelect();
+    onNextRound();
+  };
 
   // Player orientation: If user is Player 2 (guest), prioritize Player 2 as "YOU"
   const isUserP2 = isOnlineGuest;
@@ -296,10 +308,7 @@ export default function ArenaClash({
                 {/* Next Round Action Button */}
                 <button
                   type="button"
-                  onClick={() => {
-                    sounds.playSelect();
-                    onNextRound();
-                  }}
+                  onClick={handleNextDuelClick}
                   className="mt-2.5 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-amber-400/20 transform hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer font-stats"
                 >
                   <span>Next Duel ({countdown}s)</span>

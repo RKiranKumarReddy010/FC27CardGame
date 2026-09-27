@@ -614,9 +614,23 @@ class MultiplayerClient {
         gameState.matchWinner = 'Honorable Draw';
       }
     } else {
+      let winner = gameState.roundWinner;
+      if (!winner && gameState.duelPicks && gameState.duelPicks.length >= 3) {
+        let p1W = 0;
+        let p2W = 0;
+        gameState.duelPicks.forEach((p) => {
+          if (p.winner === 1) p1W++;
+          else if (p.winner === 2) p2W++;
+        });
+        if (p1W > p2W) winner = 1;
+        else if (p2W > p1W) winner = 2;
+        else winner = 'tie';
+      }
+      const nextActive = winner === 1 ? 1 : winner === 2 ? 2 : gameState.activePlayer;
+
       gameState.roundNumber += 1;
-      gameState.activePlayer = gameState.roundWinner === 1 ? 1 : gameState.roundWinner === 2 ? 2 : gameState.activePlayer;
-      gameState.currentPicker = gameState.activePlayer;
+      gameState.activePlayer = nextActive;
+      gameState.currentPicker = nextActive;
       gameState.roundStatus = 'choosing';
       gameState.duelPicks = [];
       gameState.usedAttributes = [];

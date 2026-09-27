@@ -421,8 +421,20 @@ export default function App() {
       return;
     }
 
-    // STRICT RULE: Winner of the duel gets the call for the next duel!
-    const winner = roundWinnerRef.current;
+    // STRICT RULE: Winner of the duel strictly gets the call for the next duel!
+    let winner = roundWinnerRef.current || roundWinner;
+    if (!winner && duelPicksRef.current && duelPicksRef.current.length >= 3) {
+      let p1W = 0;
+      let p2W = 0;
+      duelPicksRef.current.forEach((p) => {
+        if (p.winner === 1) p1W++;
+        else if (p.winner === 2) p2W++;
+      });
+      if (p1W > p2W) winner = 1;
+      else if (p2W > p1W) winner = 2;
+      else winner = 'tie';
+    }
+
     let nextActive = activePlayerRef.current;
     if (winner === 1) {
       nextActive = 1;
@@ -449,15 +461,15 @@ export default function App() {
     setTurnResultText('');
 
     sounds.playCardFlip();
-  }, [player1Deck, player2Deck, player1Score, player2Score, player1Name, player2Name]);
+  }, [player1Deck, player2Deck, player1Score, player2Score, player1Name, player2Name, roundWinner]);
 
-  const handleNextRound = () => {
+  const handleNextRound = useCallback(() => {
     if (gameMode === 'online') {
       multiplayer.nextRound();
     } else {
       executeNextRound();
     }
-  };
+  }, [gameMode, executeNextRound]);
 
   const handleToggleMute = () => {
     const muted = sounds.toggleMute();
