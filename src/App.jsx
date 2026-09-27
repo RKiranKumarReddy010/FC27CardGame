@@ -6,6 +6,7 @@ import MultiplayerLobby from './components/MultiplayerLobby';
 import CardGalleryModal from './components/CardGalleryModal';
 import RulesModal from './components/RulesModal';
 import GameOverModal from './components/GameOverModal';
+import CoinTossModal from './components/CoinTossModal';
 import { multiplayer } from './utils/multiplayer';
 import { sounds } from './utils/sound';
 import { Trophy, ShieldCheck } from 'lucide-react';
@@ -35,6 +36,8 @@ export default function App() {
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
+  const [isTossOpen, setIsTossOpen] = useState(false);
+  const [tossWinner, setTossWinner] = useState(1);
   const [matchWinner, setMatchWinner] = useState('');
   const [isMuted, setIsMuted] = useState(false);
 
@@ -49,17 +52,20 @@ export default function App() {
   const aiTimeoutRef = useRef(null);
 
   // Initial Deal (Deal 25 cards for 25 duels; 1 point per duel)
-  const dealNewDecks = useCallback((size = 25, p1N, p2N, startPlayer = 1) => {
+  const dealNewDecks = useCallback((size = 25, p1N, p2N, startPlayer = null) => {
     const shuffled = [...playersData].sort(() => 0.5 - Math.random());
     const p1Cards = shuffled.slice(0, size);
     const p2Cards = shuffled.slice(size, size * 2);
+
+    const winner = startPlayer !== null ? startPlayer : (Math.random() < 0.5 ? 1 : 2);
 
     setPlayer1Deck(p1Cards);
     setPlayer2Deck(p2Cards);
     setPlayer1Score(0);
     setPlayer2Score(0);
     setRoundNumber(1);
-    setActivePlayer(startPlayer);
+    setActivePlayer(winner);
+    setTossWinner(winner);
     setRoundStatus('choosing');
     setSelectedAttribute(null);
     setRoundWinner(null);
@@ -67,6 +73,7 @@ export default function App() {
     setTurnResultText('');
     setIsGameOver(false);
     setIsLobbyOpen(false);
+    setIsTossOpen(true); // 🪙 Kickoff Coin Toss!
 
     sounds.playCardFlip();
     return { p1Cards, p2Cards };
@@ -88,7 +95,10 @@ export default function App() {
           setPlayer1Score(gameState.player1Score || 0);
           setPlayer2Score(gameState.player2Score || 0);
           setRoundNumber(gameState.roundNumber || 1);
-          setActivePlayer(gameState.activePlayer || 1);
+          const winnerNum = gameState.tossWinner || gameState.activePlayer || 1;
+          setActivePlayer(winnerNum);
+          setTossWinner(winnerNum);
+          setIsTossOpen(true); // 🪙 Launch synchronized kickoff toss!
           setRoundStatus(gameState.roundStatus || 'choosing');
           setSelectedAttribute(gameState.selectedAttribute || null);
           setRoundWinner(gameState.roundWinner || null);
@@ -150,7 +160,7 @@ export default function App() {
     setDeckSize(finalSize);
     setPlayer1Name(p1);
     setPlayer2Name(p2);
-    dealNewDecks(finalSize, p1, p2, 1);
+    dealNewDecks(finalSize, p1, p2, null);
   };
 
   // Host creates an online room
@@ -239,7 +249,7 @@ export default function App() {
 
   // AI Logic
   useEffect(() => {
-    if (gameMode === 'ai' && activePlayer === 2 && roundStatus === 'choosing' && player2Deck.length > 0 && !isGameOver) {
+    if (gameMode === 'ai' && activePlayer === 2 && roundStatus === 'choosing' && player2Deck.length > 0 && !isGameOver && !isTossOpen) {
       aiTimeoutRef.current = setTimeout(() => {
         const botCard = player2Deck[0];
         const keys = ['ovr', 'pac', 'sho', 'pas', 'dri', 'def', 'phy'];
@@ -260,7 +270,7 @@ export default function App() {
         if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
       };
     }
-  }, [gameMode, activePlayer, roundStatus, player2Deck, isGameOver, executeSelectAttribute]);
+  }, [gameMode, activePlayer, roundStatus, player2Deck, isGameOver, isTossOpen, executeSelectAttribute]);
 
   // Next Duel Progression: Discard card from hand; conclude after 25 duels
   const executeNextRound = useCallback(() => {
@@ -316,7 +326,7 @@ export default function App() {
     if (gameMode === 'online') {
       multiplayer.rematch();
     } else {
-      dealNewDecks(deckSize, player1Name, player2Name, 1);
+      dealNewDecks(deckSize, player1Name, player2Name, null);
     }
   };
 
@@ -393,9 +403,21 @@ export default function App() {
         <span>•</span>
         <span className="flex items-center gap-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span>25 Duels Match • 1 Duel = 1 Point • Highest Points Wins</span>
+          <span>25 Duels Match • Kickoff Coin Toss • 1 Duel = 1 Point</span>
         </span>
       </footer>
+
+      {/* 🪙 Kickoff Coin Toss Modal */}
+      <CoinTossModal
+        isOpen={isTossOpen}
+        player1Name={player1Name}
+        player2Name={player2Name}
+        tossWinner={tossWinner}
+        onComplete={(winner) => {
+          setActivePlayer(winner);
+          setIsTossOpen(false);
+        }}
+      />
 
       {/* Lobby Modal */}
       {isLobbyOpen && (

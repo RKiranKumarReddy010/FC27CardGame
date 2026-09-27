@@ -393,6 +393,8 @@ class MultiplayerClient {
           { name: guestName, playerNumber: 2, isHost: false }
         ];
 
+        const tossWinner = Math.random() < 0.5 ? 1 : 2;
+
         this.p2pGameState = {
           player1Deck: p1Cards,
           player2Deck: p2Cards,
@@ -400,7 +402,8 @@ class MultiplayerClient {
           player2Score: 0,
           totalDuels: this.deckSize,
           roundNumber: 1,
-          activePlayer: 1,
+          activePlayer: tossWinner,
+          tossWinner,
           roundStatus: 'choosing',
           selectedAttribute: null,
           roundWinner: null,
@@ -609,6 +612,7 @@ class MultiplayerClient {
 
     if (this.isHost) {
       const { p1Cards, p2Cards } = this.dealCards(this.deckSize);
+      const tossWinner = Math.random() < 0.5 ? 1 : 2;
       this.p2pGameState = {
         player1Deck: p1Cards,
         player2Deck: p2Cards,
@@ -616,7 +620,8 @@ class MultiplayerClient {
         player2Score: 0,
         totalDuels: this.deckSize,
         roundNumber: 1,
-        activePlayer: 1,
+        activePlayer: tossWinner,
+        tossWinner,
         roundStatus: 'choosing',
         selectedAttribute: null,
         roundWinner: null,
