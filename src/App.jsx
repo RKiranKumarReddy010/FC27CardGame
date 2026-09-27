@@ -356,7 +356,11 @@ export default function App() {
   };
 
   const handleResetMatch = () => {
-    dealNewDecks(deckSize, player1Name, player2Name, 1);
+    if (gameMode === 'online') {
+      multiplayer.rematch();
+    } else {
+      dealNewDecks(deckSize, player1Name, player2Name, 1);
+    }
   };
 
   return (
