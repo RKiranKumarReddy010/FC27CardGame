@@ -24,12 +24,23 @@ export default function App() {
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
   const [roundNumber, setRoundNumber] = useState(1);
-  const [activePlayer, setActivePlayer] = useState(1); // 1 or 2
+  const [activePlayer, setActivePlayer] = useState(1); // 1 or 2 (Caller of the duel)
+  const [currentPicker, setCurrentPicker] = useState(1); // 1 or 2 (Who is picking attribute right now)
+  const [duelPicks, setDuelPicks] = useState([]); // [{ attribute, picker, winner, p1Val, p2Val }]
+  const [usedAttributes, setUsedAttributes] = useState([]); // ['pac', 'sho', ...]
   const [roundStatus, setRoundStatus] = useState('choosing'); // 'choosing' | 'revealed'
   const [selectedAttribute, setSelectedAttribute] = useState(null);
   const [roundWinner, setRoundWinner] = useState(null); // 1 | 2 | 'tie'
   const [roundResultText, setRoundResultText] = useState('');
   const [turnResultText, setTurnResultText] = useState('');
+
+  // Refs for 100% reliable state access without React stale closure issues
+  const activePlayerRef = useRef(1);
+  const currentPickerRef = useRef(1);
+  const roundWinnerRef = useRef(null);
+  const duelPicksRef = useRef([]);
+  const usedAttributesRef = useRef([]);
+  const roundStatusRef = useRef('choosing');
   
   // Modals & UI Feedback
   const [isLobbyOpen, setIsLobbyOpen] = useState(true);
@@ -59,13 +70,23 @@ export default function App() {
 
     const winner = startPlayer !== null ? startPlayer : (Math.random() < 0.5 ? 1 : 2);
 
+    activePlayerRef.current = winner;
+    currentPickerRef.current = winner;
+    roundWinnerRef.current = null;
+    duelPicksRef.current = [];
+    usedAttributesRef.current = [];
+    roundStatusRef.current = 'choosing';
+
     setPlayer1Deck(p1Cards);
     setPlayer2Deck(p2Cards);
     setPlayer1Score(0);
     setPlayer2Score(0);
     setRoundNumber(1);
     setActivePlayer(winner);
+    setCurrentPicker(winner);
     setTossWinner(winner);
+    setDuelPicks([]);
+    setUsedAttributes([]);
     setRoundStatus('choosing');
     setSelectedAttribute(null);
     setRoundWinner(null);
@@ -96,8 +117,19 @@ export default function App() {
           setPlayer2Score(gameState.player2Score || 0);
           setRoundNumber(gameState.roundNumber || 1);
           const winnerNum = gameState.tossWinner || gameState.activePlayer || 1;
+          
+          activePlayerRef.current = winnerNum;
+          currentPickerRef.current = winnerNum;
+          roundWinnerRef.current = null;
+          duelPicksRef.current = [];
+          usedAttributesRef.current = [];
+          roundStatusRef.current = 'choosing';
+
           setActivePlayer(winnerNum);
+          setCurrentPicker(winnerNum);
           setTossWinner(winnerNum);
+          setDuelPicks([]);
+          setUsedAttributes([]);
           setIsTossOpen(true); // 🪙 Launch synchronized kickoff toss!
           setRoundStatus(gameState.roundStatus || 'choosing');
           setSelectedAttribute(gameState.selectedAttribute || null);
@@ -112,17 +144,45 @@ export default function App() {
         setIsLobbyOpen(false);
         sounds.playCardFlip();
       },
+      onPickResolved: ({ gameState }) => {
+        if (!gameState) return;
+        const picks = gameState.duelPicks || [];
+        const used = gameState.usedAttributes || [];
+        const picker = gameState.currentPicker || gameState.activePlayer;
+
+        duelPicksRef.current = picks;
+        usedAttributesRef.current = used;
+        currentPickerRef.current = picker;
+        roundStatusRef.current = gameState.roundStatus || 'choosing';
+
+        setDuelPicks(picks);
+        setUsedAttributes(used);
+        setCurrentPicker(picker);
+        setRoundStatus(gameState.roundStatus || 'choosing');
+        setSelectedAttribute(gameState.selectedAttribute || null);
+        setRoundResultText(gameState.roundResultText || '');
+        setTurnResultText(gameState.turnResultText || '');
+        sounds.playClash();
+      },
       onRoundRevealed: ({ gameState }) => {
         if (!gameState) return;
+        const winner = gameState.roundWinner;
+        roundWinnerRef.current = winner;
+        roundStatusRef.current = gameState.roundStatus || 'revealed';
+        duelPicksRef.current = gameState.duelPicks || [];
+        usedAttributesRef.current = gameState.usedAttributes || [];
+
         setSelectedAttribute(gameState.selectedAttribute);
         setRoundStatus(gameState.roundStatus);
-        setRoundWinner(gameState.roundWinner);
+        setRoundWinner(winner);
+        setDuelPicks(gameState.duelPicks || []);
+        setUsedAttributes(gameState.usedAttributes || []);
         setRoundResultText(gameState.roundResultText);
         setTurnResultText(gameState.turnResultText);
         if (gameState.player1Score !== undefined) setPlayer1Score(gameState.player1Score);
         if (gameState.player2Score !== undefined) setPlayer2Score(gameState.player2Score);
         sounds.playClash();
-        if (gameState.roundWinner === 'tie') {
+        if (winner === 'tie') {
           sounds.playTie();
         } else {
           sounds.playWin();
@@ -130,13 +190,24 @@ export default function App() {
       },
       onRoundAdvanced: ({ gameState }) => {
         if (!gameState) return;
+        const nextCaller = gameState.activePlayer;
+        activePlayerRef.current = nextCaller;
+        currentPickerRef.current = nextCaller;
+        roundWinnerRef.current = null;
+        duelPicksRef.current = [];
+        usedAttributesRef.current = [];
+        roundStatusRef.current = 'choosing';
+
         setPlayer1Deck(gameState.player1Deck);
         setPlayer2Deck(gameState.player2Deck);
         if (gameState.player1Score !== undefined) setPlayer1Score(gameState.player1Score);
         if (gameState.player2Score !== undefined) setPlayer2Score(gameState.player2Score);
         setRoundNumber(gameState.roundNumber);
-        setActivePlayer(gameState.activePlayer);
+        setActivePlayer(nextCaller);
+        setCurrentPicker(nextCaller);
         setRoundStatus('choosing');
+        setDuelPicks([]);
+        setUsedAttributes([]);
         setSelectedAttribute(null);
         setRoundWinner(null);
         setRoundResultText('');
@@ -202,42 +273,91 @@ export default function App() {
     });
   };
 
-  // Local/AI Attribute selection logic: 1 Duel = 1 Point
+  // 3-Attribute Clash per Duel: Pick 1 (Caller) -> Pick 2 (Opponent) -> Pick 3 (Caller). Winner of 2/3 gets +1 Match Point!
   const executeSelectAttribute = useCallback((attrKey) => {
-    if (roundStatus !== 'choosing') return;
+    if (roundStatusRef.current !== 'choosing') return;
     if (player1Deck.length === 0 || player2Deck.length === 0) return;
+    if (usedAttributesRef.current.includes(attrKey)) return;
 
     const p1Card = player1Deck[0];
     const p2Card = player2Deck[0];
 
     const p1Val = p1Card.stats[attrKey];
     const p2Val = p2Card.stats[attrKey];
-
-    setSelectedAttribute(attrKey);
-    setRoundStatus('revealed');
-    sounds.playClash();
-
     const attrName = attrKey.toUpperCase();
 
-    if (p1Val > p2Val) {
-      setRoundWinner(1);
-      setPlayer1Score((s) => s + 1);
-      setRoundResultText(`${p1Card.name} (${p1Val} ${attrName}) beats ${p2Card.name} (${p2Val} ${attrName})!`);
-      setTurnResultText(`🎉 ${player1Name} wins Duel ${roundNumber} (+1 Pt) & retains the call!`);
-      sounds.playWin();
-    } else if (p2Val > p1Val) {
-      setRoundWinner(2);
-      setPlayer2Score((s) => s + 1);
-      setRoundResultText(`${p2Card.name} (${p2Val} ${attrName}) beats ${p1Card.name} (${p1Val} ${attrName})!`);
-      setTurnResultText(`🎉 ${player2Name} wins Duel ${roundNumber} (+1 Pt) & takes the call!`);
-      sounds.playWin();
-    } else {
-      setRoundWinner('tie');
-      setRoundResultText(`⚔️ Stalemate! Both cards tied with ${p1Val} ${attrName}!`);
-      setTurnResultText(`Duel ${roundNumber} ended in a draw (0 pts). Call stays with ${activePlayer === 1 ? player1Name : player2Name}!`);
-      sounds.playTie();
+    const pickWinner = p1Val > p2Val ? 1 : p2Val > p1Val ? 2 : 'tie';
+    const currentPickerNum = currentPickerRef.current;
+
+    const pickObj = {
+      attribute: attrKey,
+      picker: currentPickerNum,
+      p1Val,
+      p2Val,
+      winner: pickWinner
+    };
+
+    const nextPicks = [...duelPicksRef.current, pickObj];
+    const nextUsed = [...usedAttributesRef.current, attrKey];
+
+    duelPicksRef.current = nextPicks;
+    usedAttributesRef.current = nextUsed;
+
+    setDuelPicks(nextPicks);
+    setUsedAttributes(nextUsed);
+    setSelectedAttribute(attrKey);
+    sounds.playClash();
+
+    const pickNum = nextPicks.length;
+
+    if (pickNum < 3) {
+      // Pick 1 -> Opponent picks Pick 2; Pick 2 -> Caller picks Pick 3
+      const nextPicker = pickNum === 1
+        ? (activePlayerRef.current === 1 ? 2 : 1)
+        : activePlayerRef.current;
+
+      currentPickerRef.current = nextPicker;
+      setCurrentPicker(nextPicker);
+
+      const winnerName = pickWinner === 1 ? player1Name : pickWinner === 2 ? player2Name : 'Draw';
+      setRoundResultText(`Pick ${pickNum}/3 (${attrName}): ${player1Name} (${p1Val}) vs ${player2Name} (${p2Val}) -> ${winnerName} takes clash!`);
+      setTurnResultText(`Pick ${pickNum + 1}/3: ${nextPicker === 1 ? player1Name : player2Name}'s turn to choose attribute!`);
+      return;
     }
-  }, [roundStatus, player1Deck, player2Deck, roundNumber, activePlayer, player1Name, player2Name]);
+
+    // All 3 picks completed! Tally clash victories to determine duel winner
+    let p1Wins = 0;
+    let p2Wins = 0;
+    nextPicks.forEach((p) => {
+      if (p.winner === 1) p1Wins++;
+      else if (p.winner === 2) p2Wins++;
+    });
+
+    let dWinner = null;
+    if (p1Wins > p2Wins) {
+      dWinner = 1;
+      setPlayer1Score((s) => s + 1);
+      sounds.playWin();
+      setRoundResultText(`🎉 ${player1Name} won Duel ${roundNumber} (${p1Wins} - ${p2Wins})! (+1 Pt)`);
+      setTurnResultText(`${player1Name} retains call advantage for Duel ${roundNumber + 1}!`);
+    } else if (p2Wins > p1Wins) {
+      dWinner = 2;
+      setPlayer2Score((s) => s + 1);
+      sounds.playWin();
+      setRoundResultText(`🎉 ${player2Name} won Duel ${roundNumber} (${p2Wins} - ${p1Wins})! (+1 Pt)`);
+      setTurnResultText(`${player2Name} takes call advantage for Duel ${roundNumber + 1}!`);
+    } else {
+      dWinner = 'tie';
+      sounds.playTie();
+      setRoundResultText(`⚔️ Duel ${roundNumber} ended in a Draw (${p1Wins} - ${p2Wins})!`);
+      setTurnResultText(`Stalemate (0 pts). Call stays with ${activePlayerRef.current === 1 ? player1Name : player2Name}!`);
+    }
+
+    roundWinnerRef.current = dWinner;
+    roundStatusRef.current = 'revealed';
+    setRoundWinner(dWinner);
+    setRoundStatus('revealed');
+  }, [player1Deck, player2Deck, roundNumber, player1Name, player2Name]);
 
   const handleSelectAttribute = (attrKey) => {
     if (gameMode === 'online') {
@@ -247,16 +367,21 @@ export default function App() {
     }
   };
 
-  // AI Logic
+  // AI Logic: Triggered whenever it's Player 2's turn to pick
   useEffect(() => {
-    if (gameMode === 'ai' && activePlayer === 2 && roundStatus === 'choosing' && player2Deck.length > 0 && !isGameOver && !isTossOpen) {
+    if (gameMode === 'ai' && currentPicker === 2 && roundStatus === 'choosing' && player2Deck.length > 0 && !isGameOver && !isTossOpen) {
       aiTimeoutRef.current = setTimeout(() => {
         const botCard = player2Deck[0];
-        const keys = ['ovr', 'pac', 'sho', 'pas', 'dri', 'def', 'phy'];
-        let bestKey = 'ovr';
+        // 6 core attributes (without OVR)
+        const allKeys = ['pac', 'sho', 'pas', 'dri', 'def', 'phy'];
+        const availableKeys = allKeys.filter((k) => !usedAttributesRef.current.includes(k));
+
+        if (availableKeys.length === 0) return;
+
+        let bestKey = availableKeys[0];
         let highest = -1;
 
-        keys.forEach((k) => {
+        availableKeys.forEach((k) => {
           if (botCard.stats[k] > highest) {
             highest = botCard.stats[k];
             bestKey = k;
@@ -264,17 +389,17 @@ export default function App() {
         });
 
         executeSelectAttribute(bestKey);
-      }, 1200);
+      }, 1000);
 
       return () => {
         if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
       };
     }
-  }, [gameMode, activePlayer, roundStatus, player2Deck, isGameOver, isTossOpen, executeSelectAttribute]);
+  }, [gameMode, currentPicker, roundStatus, player2Deck, isGameOver, isTossOpen, executeSelectAttribute]);
 
-  // Next Duel Progression: Discard card from hand; conclude after 25 duels
+  // Next Duel Progression: Discard current card; winner of previous duel CALLS the next duel!
   const executeNextRound = useCallback(() => {
-    if (roundStatus !== 'revealed') return;
+    if (roundStatusRef.current !== 'revealed') return;
     if (player1Deck.length === 0 || player2Deck.length === 0) return;
 
     const p1Remaining = player1Deck.slice(1);
@@ -296,18 +421,35 @@ export default function App() {
       return;
     }
 
-    const nextActivePlayer = roundWinner === 1 ? 1 : roundWinner === 2 ? 2 : activePlayer;
+    // STRICT RULE: Winner of the duel gets the call for the next duel!
+    const winner = roundWinnerRef.current;
+    let nextActive = activePlayerRef.current;
+    if (winner === 1) {
+      nextActive = 1;
+    } else if (winner === 2) {
+      nextActive = 2;
+    }
+
+    activePlayerRef.current = nextActive;
+    currentPickerRef.current = nextActive;
+    roundWinnerRef.current = null;
+    roundStatusRef.current = 'choosing';
+    duelPicksRef.current = [];
+    usedAttributesRef.current = [];
 
     setRoundNumber((r) => r + 1);
-    setActivePlayer(nextActivePlayer);
+    setActivePlayer(nextActive);
+    setCurrentPicker(nextActive);
     setRoundStatus('choosing');
+    setDuelPicks([]);
+    setUsedAttributes([]);
     setSelectedAttribute(null);
     setRoundWinner(null);
     setRoundResultText('');
     setTurnResultText('');
 
     sounds.playCardFlip();
-  }, [roundStatus, player1Deck, player2Deck, player1Score, player2Score, activePlayer, roundWinner, player1Name, player2Name]);
+  }, [player1Deck, player2Deck, player1Score, player2Score, player1Name, player2Name]);
 
   const handleNextRound = () => {
     if (gameMode === 'online') {
@@ -361,6 +503,9 @@ export default function App() {
             player1Name={player1Name}
             player2Name={player2Name}
             activePlayer={activePlayer}
+            currentPicker={currentPicker}
+            duelPicks={duelPicks}
+            usedAttributes={usedAttributes}
             selectedAttribute={selectedAttribute}
             roundStatus={roundStatus}
             roundWinner={roundWinner}

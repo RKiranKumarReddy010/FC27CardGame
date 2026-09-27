@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ATTRIBUTES } from '../constants/attributes';
 import { sounds } from '../utils/sound';
-import { Shield, Sparkles, Award, Crown, XCircle, Swords, User } from 'lucide-react';
+import { Shield, Sparkles, Award, Crown, XCircle, Swords, User, Check } from 'lucide-react';
 
-const ROW_1_KEYS = ['ovr', 'pac', 'sho', 'pas'];
+const ROW_1_KEYS = ['pac', 'sho', 'pas'];
 const ROW_2_KEYS = ['dri', 'def', 'phy'];
 
 export default function CardView({
@@ -12,13 +12,15 @@ export default function CardView({
   isFacedown = false,
   onSelectAttribute,
   selectedAttribute = null,
+  usedAttributes = [], // Attributes already chosen in this 3-pick duel
+  duelPicks = [], // [{ attribute, winner, p1Val, p2Val }]
   isWinner = false,
   isLoser = false,
   playerName = 'Player',
   isCurrentTurn = false
 }) {
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
-  const [imgErrorStage, setImgErrorStage] = useState(0); // 0: EA webp, 1: Futbin png, 2: avatar
+  const [imgErrorStage, setImgErrorStage] = useState(0);
   const cardRef = useRef(null);
 
   const eaId = React.useMemo(() => {
@@ -66,19 +68,16 @@ export default function CardView({
         className="card-responsive relative w-[300px] sm:w-[325px] max-w-[92vw] h-[450px] sm:h-[465px] rounded-3xl p-1 bg-gradient-to-b from-amber-400/40 via-slate-200 to-slate-300 shadow-xl transition-all duration-300 border border-amber-300/40 mx-auto"
       >
         <div className="w-full h-full rounded-[22px] bg-white p-5 flex flex-col items-center justify-between relative overflow-hidden border border-slate-200 bg-hex">
-          {/* Decorative Corner Ornaments */}
           <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-amber-500/60 rounded-tl" />
           <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-amber-500/60 rounded-tr" />
           <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-amber-500/60 rounded-bl" />
           <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-amber-500/60 rounded-br" />
 
-          {/* Top Label */}
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-700 text-[11px] font-black tracking-wider uppercase font-stats">
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
             <span>{playerName}'s Card</span>
           </div>
 
-          {/* Center Shield Emblem */}
           <div className="flex flex-col items-center justify-center my-auto">
             <div className="relative w-30 h-30 rounded-full flex items-center justify-center bg-gradient-to-tr from-amber-200 via-amber-100 to-slate-100 p-1 border-2 border-amber-400/50 shadow-inner">
               <div className="w-full h-full rounded-full bg-white flex flex-col items-center justify-center shadow-sm">
@@ -92,7 +91,6 @@ export default function CardView({
             </p>
           </div>
 
-          {/* Bottom Wait Status */}
           <div className="w-full py-2.5 px-4 rounded-xl bg-slate-50 border border-slate-200 text-center shadow-xs">
             <div className="inline-flex items-center gap-2 text-xs text-slate-700 font-semibold">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
@@ -107,7 +105,6 @@ export default function CardView({
   // Active Faceup Card
   const { name, team, nationality, position, stats, imageUrl } = card;
 
-  // Image source resolution
   const currentImageSrc = imgErrorStage === 0
     ? (imageUrl || `https://ratings-images-prod.pulse.ea.com/FC27/components/items/${eaId}_en-GB.webp`)
     : imgErrorStage === 1 && eaId
@@ -119,56 +116,69 @@ export default function CardView({
     if (!attr) return null;
     const val = stats[key];
     const isSelected = selectedAttribute === key;
+    const isUsed = usedAttributes.includes(key);
+    const pastPick = duelPicks.find((p) => p.attribute === key);
     const Icon = attr.Icon;
+
+    // Disabled if already used in this duel or not caller's turn
+    const isTileClickable = isInteractive && !isUsed;
 
     return (
       <button
         key={key}
         type="button"
-        disabled={!isInteractive}
+        disabled={!isTileClickable}
         onClick={() => {
-          if (isInteractive && onSelectAttribute) {
+          if (isTileClickable && onSelectAttribute) {
             sounds.playSelect();
             onSelectAttribute(key);
           }
         }}
         onMouseEnter={() => {
-          if (isInteractive) sounds.playHover();
+          if (isTileClickable) sounds.playHover();
         }}
         className={`relative py-1.5 sm:py-2 px-1 sm:px-1.5 rounded-xl flex flex-col items-center justify-center border transition-all duration-150 select-none ${
           isSelected
-            ? isWinner
-              ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-400 text-emerald-950 shadow-md font-black'
-              : isLoser
-              ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-400 text-rose-950 shadow-md font-black'
-              : 'bg-amber-100 border-amber-500 ring-2 ring-amber-400 shadow-md text-amber-950 font-black'
-            : isInteractive
-            ? 'bg-slate-50 hover:bg-amber-50 border-slate-200 hover:border-amber-400 active:scale-95 cursor-pointer shadow-2xs'
-            : 'bg-slate-50 border-slate-200 cursor-default opacity-90'
+            ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-400 shadow-md text-amber-950 font-black'
+            : isUsed
+            ? pastPick && pastPick.winner === 1
+              ? 'bg-emerald-50/90 border-emerald-400 text-emerald-900 opacity-90 cursor-not-allowed'
+              : pastPick && pastPick.winner === 2
+              ? 'bg-rose-50/90 border-rose-400 text-rose-900 opacity-90 cursor-not-allowed'
+              : 'bg-slate-100 border-slate-300 text-slate-500 opacity-70 cursor-not-allowed'
+            : isTileClickable
+            ? 'bg-slate-50 hover:bg-amber-50 border-slate-200 hover:border-amber-400 active:scale-95 cursor-pointer shadow-2xs hover:shadow-sm'
+            : 'bg-slate-50 border-slate-200 cursor-default opacity-85'
         }`}
       >
+        {/* Past pick badge if already used */}
+        {isUsed && pastPick && (
+          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-900 text-white text-[8px] font-bold">
+            ✓
+          </span>
+        )}
+
         <div className="flex items-center gap-1 mb-0.5">
           <div
             className="w-3.5 h-3.5 rounded flex items-center justify-center shrink-0"
             style={{
-              backgroundColor: isSelected && isWinner ? '#a7f3d0' : isSelected && isLoser ? '#fecdd3' : attr.bgColor,
-              color: isSelected && isWinner ? '#047857' : isSelected && isLoser ? '#be123c' : attr.color
+              backgroundColor: isUsed ? '#e2e8f0' : attr.bgColor,
+              color: isUsed ? '#64748b' : attr.color
             }}
           >
             <Icon className="w-2.5 h-2.5" />
           </div>
           <span className={`text-[10px] font-black uppercase tracking-wider font-stats ${
-            isSelected ? 'text-slate-950' : 'text-slate-600'
+            isUsed ? 'text-slate-400 line-through' : 'text-slate-600'
           }`}>
             {attr.short}
           </span>
         </div>
 
         <span
-          className="text-base sm:text-lg font-black font-stats leading-none"
-          style={{
-            color: isSelected && isWinner ? '#047857' : isSelected && isLoser ? '#be123c' : val >= 85 ? '#b45309' : val >= 75 ? '#0284c7' : '#334155'
-          }}
+          className={`text-base sm:text-lg font-black font-stats leading-none ${
+            isUsed ? 'text-slate-400' : val >= 85 ? 'text-amber-700' : val >= 75 ? 'text-sky-700' : 'text-slate-800'
+          }`}
         >
           {val}
         </span>
@@ -219,13 +229,16 @@ export default function CardView({
           </>
         )}
 
-        {/* Top Header Badge (Clean single row: Position • Team on left, Nation on right) */}
+        {/* Top Header Badge */}
         <div className="flex items-center justify-between mb-1.5 z-10 px-0.5">
           <div className="flex items-center gap-1.5 truncate">
+            <span className="px-2 py-0.5 rounded-md bg-slate-900 text-amber-400 font-stats font-black text-xs shadow-2xs border border-amber-400/30">
+              {stats.ovr} OVR
+            </span>
             <span className="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 font-stats font-black text-xs shadow-2xs">
               {position}
             </span>
-            <span className="text-slate-800 text-xs font-extrabold truncate max-w-[130px]">
+            <span className="text-slate-800 text-xs font-extrabold truncate max-w-[110px]">
               {team}
             </span>
           </div>
@@ -234,7 +247,7 @@ export default function CardView({
           </span>
         </div>
 
-        {/* Card Artwork Display (Generous height, no squishing on mobile) */}
+        {/* Card Artwork Display */}
         <div className="card-image-box relative w-full h-[215px] sm:h-[230px] rounded-2xl overflow-hidden bg-gradient-to-b from-slate-50 via-amber-50/10 to-slate-100/60 border border-slate-200/80 flex items-center justify-center mb-2 shadow-inner">
           {currentImageSrc && imgErrorStage < 2 ? (
             <img
@@ -263,14 +276,14 @@ export default function CardView({
           {isWinner && (
             <div className="absolute top-2 right-2 flex items-center gap-1 bg-emerald-600 text-white px-2.5 py-1 rounded-xl shadow-md z-20 animate-bounce">
               <Crown className="w-3.5 h-3.5 fill-current" />
-              <span className="text-[10px] font-black font-stats tracking-wider uppercase">WIN (+1 PT)</span>
+              <span className="text-[10px] font-black font-stats tracking-wider uppercase">DUEL WON (+1 PT)</span>
             </div>
           )}
 
           {isLoser && (
             <div className="absolute top-2 right-2 flex items-center gap-1 bg-rose-600 text-white px-2.5 py-1 rounded-xl shadow-md z-20 animate-pulse">
               <XCircle className="w-3.5 h-3.5 fill-current" />
-              <span className="text-[10px] font-black font-stats tracking-wider uppercase">LOSS (0 PTS)</span>
+              <span className="text-[10px] font-black font-stats tracking-wider uppercase">DUEL LOST (0 PTS)</span>
             </div>
           )}
         </div>
@@ -280,19 +293,17 @@ export default function CardView({
           <div className="mb-1.5 text-center">
             <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full bg-amber-100 border border-amber-400 text-amber-900 text-[10px] sm:text-[11px] font-black tracking-wider uppercase shadow-2xs animate-pulse font-stats">
               <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              <span>Tap Attribute To Challenge</span>
+              <span>Tap Available Attribute</span>
             </span>
           </div>
         )}
 
-        {/* 📊 2-ROW ATTRIBUTES GRID: Row 1 = 4 items (OVR, PAC, SHO, PAS) | Row 2 = 3 items (DRI, DEF, PHY) */}
+        {/* 📊 2-ROW ATTRIBUTES GRID: 6 Core Stats in 2 rows of 3 (Row 1: PAC, SHO, PAS | Row 2: DRI, DEF, PHY) */}
         <div className="w-full z-10">
-          {/* Row 1: 4 columns */}
-          <div className="grid grid-cols-4 gap-1.5 mb-1.5">
+          <div className="grid grid-cols-3 gap-1.5 mb-1.5">
             {ROW_1_KEYS.map((k) => renderAttributeTile(k))}
           </div>
 
-          {/* Row 2: 3 columns centered */}
           <div className="grid grid-cols-3 gap-1.5">
             {ROW_2_KEYS.map((k) => renderAttributeTile(k))}
           </div>

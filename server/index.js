@@ -119,12 +119,20 @@ io.on('connection', (socket) => {
     // Deal fresh decks (strict no-shuffle queue rule during play)
     const { p1Cards, p2Cards } = dealCards(room.deckSize);
 
+    const tossWinner = Math.random() < 0.5 ? 1 : 2;
+
     room.gameState = {
       player1Deck: p1Cards,
       player2Deck: p2Cards,
-      warPot: [],
+      player1Score: 0,
+      player2Score: 0,
+      totalDuels: room.deckSize,
       roundNumber: 1,
-      activePlayer: 1, // Player 1 starts
+      activePlayer: tossWinner,
+      currentPicker: tossWinner,
+      tossWinner,
+      duelPicks: [],
+      usedAttributes: [],
       roundStatus: 'choosing',
       selectedAttribute: null,
       roundWinner: null,
@@ -134,7 +142,7 @@ io.on('connection', (socket) => {
       matchWinner: null
     };
 
-    console.log(`Player 2 (${playerName}) joined room: ${code}. Starting match!`);
+    console.log(`Player 2 (${playerName}) joined room: ${code}. Starting match with toss winner: P${tossWinner}`);
 
     if (callback) {
       callback({
@@ -152,7 +160,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Choose Attribute (Only active player can choose)
+  // Choose Attribute (Pick 1 by Caller -> Pick 2 by Opponent -> Pick 3 by Caller)
   socket.on('choose-attribute', ({ roomCode, attribute }) => {
     const code = (roomCode || '').toUpperCase();
     const room = rooms.get(code);
@@ -160,11 +168,13 @@ io.on('connection', (socket) => {
 
     const { gameState, players } = room;
     if (gameState.roundStatus !== 'choosing') return;
+    if (gameState.usedAttributes && gameState.usedAttributes.includes(attribute)) return;
 
-    // Verify caller
-    const caller = players.find(p => p.playerNumber === gameState.activePlayer);
-    if (!caller || caller.id !== socket.id) {
-      console.warn(`Unauthorized call attempt by ${socket.id} in room ${code}`);
+    // Verify current picker
+    const currentPickerNum = gameState.currentPicker || gameState.activePlayer;
+    const pickerPlayer = players.find(p => p.playerNumber === currentPickerNum);
+    if (!pickerPlayer || pickerPlayer.id !== socket.id) {
+      console.warn(`Unauthorized pick attempt by ${socket.id} (expected P${currentPickerNum}) in room ${code}`);
       return;
     }
 
@@ -178,37 +188,72 @@ io.on('connection', (socket) => {
     const p2Name = players[1]?.name || 'Player 2';
     const attrUpper = attribute.toUpperCase();
 
-    gameState.selectedAttribute = attribute;
-    gameState.roundStatus = 'revealed';
+    const pickWinner = p1Val > p2Val ? 1 : p2Val > p1Val ? 2 : 'tie';
 
-    if (p1Val > p2Val) {
-      gameState.roundWinner = 1;
-      gameState.roundResultText = `🔥 ${p1Card.name} (${p1Val} ${attrUpper}) beats ${p2Card.name} (${p2Val} ${attrUpper})!`;
-      if (gameState.activePlayer === 1) {
-        gameState.turnResultText = `🎉 ${p1Name} wins & gets another chance to choose!`;
-      } else {
-        gameState.turnResultText = `⚡ ${p1Name} wins & takes the call from ${p2Name}!`;
-      }
-    } else if (p2Val > p1Val) {
-      gameState.roundWinner = 2;
-      gameState.roundResultText = `⚡ ${p2Card.name} (${p2Val} ${attrUpper}) beats ${p1Card.name} (${p1Val} ${attrUpper})!`;
-      if (gameState.activePlayer === 2) {
-        gameState.turnResultText = `🎉 ${p2Name} wins & gets another chance to choose!`;
-      } else {
-        gameState.turnResultText = `⚡ ${p2Name} wins & takes the call from ${p1Name}!`;
-      }
-    } else {
-      gameState.roundWinner = 'tie';
-      gameState.roundResultText = `⚔️ Stalemate! Both cards matched with ${p1Val} ${attrUpper}!`;
-      gameState.turnResultText = `Cards added to the War Pot. ${gameState.activePlayer === 1 ? p1Name : p2Name} calls from the next card!`;
+    if (!gameState.duelPicks) gameState.duelPicks = [];
+    if (!gameState.usedAttributes) gameState.usedAttributes = [];
+
+    const pickObj = {
+      attribute,
+      picker: currentPickerNum,
+      p1Val,
+      p2Val,
+      winner: pickWinner
+    };
+
+    gameState.duelPicks.push(pickObj);
+    gameState.usedAttributes.push(attribute);
+    gameState.selectedAttribute = attribute;
+
+    const pickNum = gameState.duelPicks.length;
+
+    if (pickNum < 3) {
+      // Pick 1 -> Opponent picks next; Pick 2 -> Caller picks next
+      const nextPicker = pickNum === 1
+        ? (gameState.activePlayer === 1 ? 2 : 1)
+        : gameState.activePlayer;
+
+      gameState.currentPicker = nextPicker;
+      gameState.roundStatus = 'choosing';
+
+      const winnerName = pickWinner === 1 ? p1Name : pickWinner === 2 ? p2Name : 'Draw';
+      gameState.roundResultText = `Pick ${pickNum}/3 (${attrUpper}): ${p1Name} (${p1Val}) vs ${p2Name} (${p2Val}) -> ${winnerName} takes clash!`;
+      gameState.turnResultText = `Pick ${pickNum + 1}/3: ${nextPicker === 1 ? p1Name : p2Name}'s turn to choose attribute!`;
+
+      io.to(code).emit('pick-resolved', { gameState });
+      return;
     }
 
-    console.log(`Room ${code} clash: ${attribute} (P1: ${p1Val} vs P2: ${p2Val}) -> Winner: ${gameState.roundWinner}`);
+    // All 3 picks complete -> Determine Duel Winner
+    let p1Wins = 0;
+    let p2Wins = 0;
+    gameState.duelPicks.forEach((p) => {
+      if (p.winner === 1) p1Wins++;
+      else if (p.winner === 2) p2Wins++;
+    });
+
+    gameState.roundStatus = 'revealed';
+
+    if (p1Wins > p2Wins) {
+      gameState.roundWinner = 1;
+      gameState.player1Score = (gameState.player1Score || 0) + 1;
+      gameState.roundResultText = `🎉 ${p1Name} won Duel ${gameState.roundNumber} (${p1Wins} - ${p2Wins})! (+1 Pt)`;
+      gameState.turnResultText = `${p1Name} retains call advantage for Duel ${gameState.roundNumber + 1}!`;
+    } else if (p2Wins > p1Wins) {
+      gameState.roundWinner = 2;
+      gameState.player2Score = (gameState.player2Score || 0) + 1;
+      gameState.roundResultText = `🎉 ${p2Name} won Duel ${gameState.roundNumber} (${p2Wins} - ${p1Wins})! (+1 Pt)`;
+      gameState.turnResultText = `${p2Name} takes call advantage for Duel ${gameState.roundNumber + 1}!`;
+    } else {
+      gameState.roundWinner = 'tie';
+      gameState.roundResultText = `⚔️ Duel ${gameState.roundNumber} ended in a Draw (${p1Wins} - ${p2Wins})!`;
+      gameState.turnResultText = `Stalemate (0 pts). Call stays with ${gameState.activePlayer === 1 ? p1Name : p2Name}!`;
+    }
 
     io.to(code).emit('round-revealed', { gameState });
   });
 
-  // Next Round progression (strict no-shuffle queues)
+  // Next Round progression (consumes 1 card per duel; winner calls next)
   socket.on('next-round', ({ roomCode }) => {
     const code = (roomCode || '').toUpperCase();
     const room = rooms.get(code);
@@ -217,49 +262,37 @@ io.on('connection', (socket) => {
     const { gameState, players } = room;
     if (gameState.roundStatus !== 'revealed') return;
 
-    const p1Card = gameState.player1Deck[0];
-    const p2Card = gameState.player2Deck[0];
-    if (!p1Card || !p2Card) return;
-
     const p1Remaining = gameState.player1Deck.slice(1);
     const p2Remaining = gameState.player2Deck.slice(1);
 
-    let nextP1Deck = [...p1Remaining];
-    let nextP2Deck = [...p2Remaining];
-    let nextWarPot = [...gameState.warPot];
-    let nextActive = gameState.activePlayer;
+    gameState.player1Deck = p1Remaining;
+    gameState.player2Deck = p2Remaining;
 
-    if (gameState.roundWinner === 1) {
-      nextP1Deck = [...p1Remaining, p1Card, p2Card, ...gameState.warPot];
-      nextWarPot = [];
-      nextActive = 1; // Winner gets another chance to choose!
-    } else if (gameState.roundWinner === 2) {
-      nextP2Deck = [...p2Remaining, p2Card, p1Card, ...gameState.warPot];
-      nextWarPot = [];
-      nextActive = 2; // Winner gets another chance to choose!
+    // Check if match concluded (25 duels complete)
+    if (p1Remaining.length === 0 || p2Remaining.length === 0) {
+      gameState.isGameOver = true;
+      const s1 = gameState.player1Score || 0;
+      const s2 = gameState.player2Score || 0;
+      if (s1 > s2) {
+        gameState.matchWinner = players[0]?.name || 'Player 1';
+      } else if (s2 > s1) {
+        gameState.matchWinner = players[1]?.name || 'Player 2';
+      } else {
+        gameState.matchWinner = 'Honorable Draw';
+      }
     } else {
-      nextWarPot = [...gameState.warPot, p1Card, p2Card];
-      nextActive = gameState.activePlayer; // Same chooser continues
-    }
-
-    gameState.player1Deck = nextP1Deck;
-    gameState.player2Deck = nextP2Deck;
-    gameState.warPot = nextWarPot;
-    gameState.roundNumber += 1;
-    gameState.activePlayer = nextActive;
-    gameState.roundStatus = 'choosing';
-    gameState.selectedAttribute = null;
-    gameState.roundWinner = null;
-    gameState.roundResultText = '';
-    gameState.turnResultText = '';
-
-    // Check game over
-    if (nextP1Deck.length === 0) {
-      gameState.isGameOver = true;
-      gameState.matchWinner = players[1]?.name || 'Player 2';
-    } else if (nextP2Deck.length === 0) {
-      gameState.isGameOver = true;
-      gameState.matchWinner = players[0]?.name || 'Player 1';
+      // Winner of previous duel becomes next active player/caller!
+      const nextActive = gameState.roundWinner === 1 ? 1 : gameState.roundWinner === 2 ? 2 : gameState.activePlayer;
+      gameState.roundNumber += 1;
+      gameState.activePlayer = nextActive;
+      gameState.currentPicker = nextActive;
+      gameState.roundStatus = 'choosing';
+      gameState.duelPicks = [];
+      gameState.usedAttributes = [];
+      gameState.selectedAttribute = null;
+      gameState.roundWinner = null;
+      gameState.roundResultText = '';
+      gameState.turnResultText = '';
     }
 
     io.to(code).emit('round-advanced', { gameState });

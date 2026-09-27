@@ -403,7 +403,10 @@ class MultiplayerClient {
           totalDuels: this.deckSize,
           roundNumber: 1,
           activePlayer: tossWinner,
+          currentPicker: tossWinner,
           tossWinner,
+          duelPicks: [],
+          usedAttributes: [],
           roundStatus: 'choosing',
           selectedAttribute: null,
           roundWinner: null,
@@ -440,6 +443,13 @@ class MultiplayerClient {
       case 'CHOOSE_ATTRIBUTE': {
         if (this.isHost) {
           this.evaluateAttributeChoice(data.attribute);
+        }
+        break;
+      }
+
+      case 'PICK_RESOLVED': {
+        if (this.callbacks.onPickResolved) {
+          this.callbacks.onPickResolved({ gameState: data.gameState });
         }
         break;
       }
@@ -481,11 +491,12 @@ class MultiplayerClient {
     }
   }
 
-  // 1 Duel = 1 Point
+  // 3-Attribute Clash per Duel: Pick 1 (Caller) -> Pick 2 (Opponent) -> Pick 3 (Caller). Winner of 2/3 gets 1 Point!
   evaluateAttributeChoice(attribute) {
     if (!this.p2pGameState) return;
     const gameState = this.p2pGameState;
     if (gameState.roundStatus !== 'choosing') return;
+    if (gameState.usedAttributes && gameState.usedAttributes.includes(attribute)) return;
 
     const p1Card = gameState.player1Deck[0];
     const p2Card = gameState.player2Deck[0];
@@ -497,23 +508,75 @@ class MultiplayerClient {
     const p2Name = this.players[1]?.name || 'Player 2';
     const attrUpper = attribute.toUpperCase();
 
+    const pickWinner = p1Val > p2Val ? 1 : p2Val > p1Val ? 2 : 'tie';
+
+    if (!gameState.duelPicks) gameState.duelPicks = [];
+    if (!gameState.usedAttributes) gameState.usedAttributes = [];
+
+    const pickObj = {
+      attribute,
+      picker: gameState.currentPicker || gameState.activePlayer,
+      p1Val,
+      p2Val,
+      winner: pickWinner
+    };
+
+    gameState.duelPicks.push(pickObj);
+    gameState.usedAttributes.push(attribute);
     gameState.selectedAttribute = attribute;
+
+    const pickNum = gameState.duelPicks.length;
+
+    if (pickNum < 3) {
+      // Pick sequence:
+      // Pick 1 done (Caller) -> next is Pick 2 (Opponent)
+      // Pick 2 done (Opponent) -> next is Pick 3 (Caller)
+      const nextPicker = pickNum === 1
+        ? (gameState.activePlayer === 1 ? 2 : 1)
+        : gameState.activePlayer;
+
+      gameState.currentPicker = nextPicker;
+      gameState.roundStatus = 'choosing';
+
+      const winnerName = pickWinner === 1 ? p1Name : pickWinner === 2 ? p2Name : 'Draw';
+      gameState.roundResultText = `Pick ${pickNum}/3 (${attrUpper}): ${p1Name} (${p1Val}) vs ${p2Name} (${p2Val}) -> ${winnerName} takes clash!`;
+      gameState.turnResultText = `Pick ${pickNum + 1}/3: ${nextPicker === 1 ? p1Name : p2Name}'s turn to choose attribute!`;
+
+      if (this.callbacks.onPickResolved) {
+        this.callbacks.onPickResolved({ gameState });
+      }
+
+      this.sendP2P({
+        type: 'PICK_RESOLVED',
+        gameState
+      });
+      return;
+    }
+
+    // All 3 picks finished! Resolve duel winner
+    let p1Wins = 0;
+    let p2Wins = 0;
+    gameState.duelPicks.forEach((p) => {
+      if (p.winner === 1) p1Wins++;
+      else if (p.winner === 2) p2Wins++;
+    });
+
     gameState.roundStatus = 'revealed';
 
-    if (p1Val > p2Val) {
+    if (p1Wins > p2Wins) {
       gameState.roundWinner = 1;
       gameState.player1Score = (gameState.player1Score || 0) + 1;
-      gameState.roundResultText = `🔥 ${p1Card.name} (${p1Val} ${attrUpper}) beats ${p2Card.name} (${p2Val} ${attrUpper})!`;
-      gameState.turnResultText = `🎉 ${p1Name} wins Duel ${gameState.roundNumber} (+1 Pt) & retains the call!`;
-    } else if (p2Val > p1Val) {
+      gameState.roundResultText = `🎉 ${p1Name} won Duel ${gameState.roundNumber} (${p1Wins} - ${p2Wins})! (+1 Pt)`;
+      gameState.turnResultText = `${p1Name} retains call advantage for Duel ${gameState.roundNumber + 1}!`;
+    } else if (p2Wins > p1Wins) {
       gameState.roundWinner = 2;
       gameState.player2Score = (gameState.player2Score || 0) + 1;
-      gameState.roundResultText = `⚡ ${p2Card.name} (${p2Val} ${attrUpper}) beats ${p1Card.name} (${p1Val} ${attrUpper})!`;
-      gameState.turnResultText = `🎉 ${p2Name} wins Duel ${gameState.roundNumber} (+1 Pt) & takes the call!`;
+      gameState.roundResultText = `🎉 ${p2Name} won Duel ${gameState.roundNumber} (${p2Wins} - ${p1Wins})! (+1 Pt)`;
+      gameState.turnResultText = `${p2Name} takes call advantage for Duel ${gameState.roundNumber + 1}!`;
     } else {
       gameState.roundWinner = 'tie';
-      gameState.roundResultText = `⚔️ Stalemate! Both cards matched with ${p1Val} ${attrUpper}!`;
-      gameState.turnResultText = `Duel ${gameState.roundNumber} tied (0 pts). Call stays with ${gameState.activePlayer === 1 ? p1Name : p2Name}!`;
+      gameState.roundResultText = `⚔️ Duel ${gameState.roundNumber} ended in a Draw (${p1Wins} - ${p2Wins})!`;
+      gameState.turnResultText = `Stalemate (0 pts). Call stays with ${gameState.activePlayer === 1 ? p1Name : p2Name}!`;
     }
 
     if (this.callbacks.onRoundRevealed) {
@@ -553,7 +616,10 @@ class MultiplayerClient {
     } else {
       gameState.roundNumber += 1;
       gameState.activePlayer = gameState.roundWinner === 1 ? 1 : gameState.roundWinner === 2 ? 2 : gameState.activePlayer;
+      gameState.currentPicker = gameState.activePlayer;
       gameState.roundStatus = 'choosing';
+      gameState.duelPicks = [];
+      gameState.usedAttributes = [];
       gameState.selectedAttribute = null;
       gameState.roundWinner = null;
       gameState.roundResultText = '';

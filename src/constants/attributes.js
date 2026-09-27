@@ -3,15 +3,6 @@ import { Star, Zap, Target, Send, Sparkles, Shield, Dumbbell } from 'lucide-reac
 
 export const ATTRIBUTES = [
   { 
-    key: 'ovr', 
-    label: 'Overall Rating', 
-    short: 'OVR', 
-    Icon: Star, 
-    color: '#d97706', 
-    bgColor: '#fef3c7',
-    desc: 'Overall player excellence' 
-  },
-  { 
     key: 'pac', 
     label: 'Pace', 
     short: 'PAC', 

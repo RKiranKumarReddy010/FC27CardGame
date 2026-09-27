@@ -10,6 +10,9 @@ export default function ArenaClash({
   player1Name,
   player2Name,
   activePlayer,
+  currentPicker = 1,
+  duelPicks = [],
+  usedAttributes = [],
   selectedAttribute,
   roundStatus, // 'choosing' | 'revealed'
   roundWinner, // 1 | 2 | 'tie' | null
@@ -51,20 +54,136 @@ export default function ArenaClash({
   const myCard = isUserP2 ? player2Card : player1Card;
   const myName = isUserP2 ? player2Name : player1Name;
   const myDeck = isUserP2 ? player2Deck : player1Deck;
-  const isMyTurn = isUserP2 ? activePlayer === 2 : activePlayer === 1;
+  const isMyCall = isUserP2 ? activePlayer === 2 : activePlayer === 1;
+  const isMyPick = isUserP2 ? currentPicker === 2 : currentPicker === 1;
   const myWinner = isUserP2 ? roundWinner === 2 : roundWinner === 1;
   const myLoser = isUserP2 ? roundWinner === 1 : roundWinner === 2;
 
   const opponentCard = isUserP2 ? player1Card : player2Card;
   const opponentName = isUserP2 ? player1Name : player2Name;
-  const isOpponentTurn = !isMyTurn;
+  const isOpponentCall = !isMyCall;
+  const isOpponentPick = !isMyPick;
   const opponentWinner = isUserP2 ? roundWinner === 1 : roundWinner === 2;
   const opponentLoser = isUserP2 ? roundWinner === 2 : roundWinner === 1;
 
-  const isOpponentFacedown = roundStatus === 'choosing';
+  const isOpponentFacedown = gameMode !== 'local' && roundStatus === 'choosing';
 
-  const activeAttrObj = ATTRIBUTES.find(a => a.key === selectedAttribute);
-  const AttrIcon = activeAttrObj?.Icon || Swords;
+  // Calculate clash points within the current duel (out of 3)
+  const myPickWins = duelPicks.filter(p => isUserP2 ? p.winner === 2 : p.winner === 1).length;
+  const oppPickWins = duelPicks.filter(p => isUserP2 ? p.winner === 1 : p.winner === 2).length;
+
+  const currentPickNumber = Math.min(duelPicks.length + 1, 3);
+
+  // Slot helper for 3 picks
+  const renderPickSlot = (slotIndex) => {
+    const pick = duelPicks[slotIndex];
+    const isSlotCurrent = roundStatus === 'choosing' && duelPicks.length === slotIndex;
+    const isSlotPending = duelPicks.length < slotIndex;
+    const pickNum = slotIndex + 1;
+
+    // Whose pick is this slot?
+    // Slot 0 (Pick 1): Caller
+    // Slot 1 (Pick 2): Opponent
+    // Slot 2 (Pick 3): Caller
+    const slotPickerNum = slotIndex === 1
+      ? (activePlayer === 1 ? 2 : 1)
+      : activePlayer;
+    const isSlotMine = isUserP2 ? slotPickerNum === 2 : slotPickerNum === 1;
+    const pickerLabel = isSlotMine ? 'YOU' : opponentName;
+
+    if (pick) {
+      const attrObj = ATTRIBUTES.find(a => a.key === pick.attribute);
+      const AttrIcon = attrObj?.Icon || Swords;
+      const myVal = isUserP2 ? pick.p2Val : pick.p1Val;
+      const oppVal = isUserP2 ? pick.p1Val : pick.p2Val;
+      const didIWin = isUserP2 ? pick.winner === 2 : pick.winner === 1;
+      const didOppWin = isUserP2 ? pick.winner === 1 : pick.winner === 2;
+      const isTie = pick.winner === 'tie';
+
+      return (
+        <div
+          key={`slot-${slotIndex}`}
+          className={`flex-1 p-2 rounded-xl border flex flex-col items-center justify-between text-center transition-all ${
+            didIWin
+              ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-2xs'
+              : didOppWin
+              ? 'bg-rose-50 border-rose-300 text-rose-950 opacity-90'
+              : 'bg-slate-100 border-slate-300 text-slate-800'
+          }`}
+        >
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 font-stats">
+              #{pickNum}
+            </span>
+            <div
+              className="w-3.5 h-3.5 rounded flex items-center justify-center shrink-0"
+              style={{ backgroundColor: attrObj?.bgColor, color: attrObj?.color }}
+            >
+              <AttrIcon className="w-2.5 h-2.5" />
+            </div>
+            <span className="text-[10px] font-black uppercase font-stats">
+              {attrObj?.short || pick.attribute.toUpperCase()}
+            </span>
+          </div>
+
+          <div className="text-[11px] font-black font-stats my-0.5">
+            <span className={didIWin ? 'text-emerald-700 font-extrabold' : 'text-slate-700'}>{myVal}</span>
+            <span className="text-slate-400 mx-1">v</span>
+            <span className={didOppWin ? 'text-rose-700 font-extrabold' : 'text-slate-700'}>{oppVal}</span>
+          </div>
+
+          <span className={`text-[8px] font-black uppercase px-1.5 py-0.2 rounded-full font-stats tracking-wider ${
+            didIWin
+              ? 'bg-emerald-600 text-white'
+              : didOppWin
+              ? 'bg-rose-600 text-white'
+              : 'bg-slate-300 text-slate-800'
+          }`}>
+            {didIWin ? 'YOU WON' : didOppWin ? 'LOST' : 'DRAW'}
+          </span>
+        </div>
+      );
+    }
+
+    if (isSlotCurrent) {
+      return (
+        <div
+          key={`slot-${slotIndex}`}
+          className="flex-1 p-2 rounded-xl border-2 border-amber-400 bg-amber-50/80 flex flex-col items-center justify-between text-center ring-2 ring-amber-400/40 animate-pulse shadow-sm"
+        >
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="text-[9px] font-black uppercase tracking-wider text-amber-800 font-stats">
+              #{pickNum} ACTIVE
+            </span>
+          </div>
+          <span className="text-[10px] font-black uppercase font-stats text-slate-900">
+            {isSlotMine ? 'YOUR PICK' : `${pickerLabel}`}
+          </span>
+          <span className="text-[8px] font-bold text-amber-700 uppercase">
+            {isSlotMine ? 'Tap Below' : 'Picking...'}
+          </span>
+        </div>
+      );
+    }
+
+    // Pending slot
+    return (
+      <div
+        key={`slot-${slotIndex}`}
+        className="flex-1 p-2 rounded-xl border border-slate-200 bg-slate-50/60 flex flex-col items-center justify-between text-center opacity-70"
+      >
+        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-stats">
+          #{pickNum}
+        </span>
+        <span className="text-[9px] font-bold uppercase font-stats text-slate-500">
+          {pickerLabel}
+        </span>
+        <span className="text-[8px] text-slate-400">
+          Pending
+        </span>
+      </div>
+    );
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto flex flex-col items-center justify-between py-1 px-2 sm:px-4">
@@ -75,148 +194,150 @@ export default function ArenaClash({
         <div className="flex flex-col items-center">
           <div className="mb-1 flex items-center gap-2">
             <span className={`inline-flex items-center gap-1.5 text-xs font-black px-3.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
-              isMyTurn 
-                ? 'bg-amber-400 text-slate-950 border border-amber-500 ring-2 ring-amber-400/40' 
+              isMyPick 
+                ? 'bg-amber-400 text-slate-950 border border-amber-500 ring-2 ring-amber-400/50 animate-pulse' 
+                : isMyCall
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
                 : 'bg-white text-slate-700 border border-slate-200'
             }`}>
-              {isMyTurn && <Crown className="w-3.5 h-3.5 fill-current" />}
-              <span>{myName} (YOU) {isMyTurn && '• CALLING'}</span>
+              {isMyCall && <Crown className="w-3.5 h-3.5 fill-current" />}
+              <span>{myName} (YOU) {isMyPick ? '• PICKING NOW' : isMyCall ? '• CALLER' : ''}</span>
             </span>
           </div>
 
           <CardView
             key={`my-${myCard?.id || 'empty'}`}
             card={myCard}
-            isInteractive={roundStatus === 'choosing' && isMyTurn}
+            isInteractive={roundStatus === 'choosing' && isMyPick}
             isFacedown={false}
             onSelectAttribute={onSelectAttribute}
             selectedAttribute={selectedAttribute}
+            usedAttributes={usedAttributes}
+            duelPicks={duelPicks}
             isWinner={roundStatus === 'revealed' && myWinner}
             isLoser={roundStatus === 'revealed' && myLoser}
             playerName={myName}
-            isCurrentTurn={isMyTurn}
+            isCurrentTurn={isMyPick}
           />
         </div>
 
-        {/* CENTER: Clash Controller */}
+        {/* CENTER: 3-Pick Clash Controller */}
         <div className="flex flex-col items-center justify-center my-1 sm:my-2 lg:my-0 z-20 max-w-xs sm:max-w-sm w-full text-center">
-          {roundStatus === 'choosing' ? (
-            <div className="glass-panel p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl w-full flex flex-col items-center border border-amber-300 bg-white/95 shadow-md">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-500 flex items-center justify-center mb-2 shadow-md shadow-amber-400/30 animate-bounce">
-                <Swords className="w-5 h-5 sm:w-6 sm:h-6 text-slate-950" />
-              </div>
+          <div className={`p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl w-full flex flex-col items-center border shadow-md transition-all ${
+            roundStatus === 'revealed' 
+              ? 'border-2 border-amber-400 bg-white shadow-xl' 
+              : 'border-amber-300 bg-white/95'
+          }`}>
 
-              <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-300 mb-1 font-stats">
+            {/* Duel Header */}
+            <div className="w-full flex items-center justify-between mb-2">
+              <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-300 font-stats">
                 Duel {roundNumber} of {totalDuels}
               </span>
-
-              <h2 className="text-base sm:text-lg font-black text-slate-900 font-stats tracking-wider uppercase mb-1">
-                {isMyTurn ? 'Your Call' : `${opponentName}'s Call`}
-              </h2>
-
-              <p className="text-[11px] sm:text-xs text-slate-600 font-semibold mb-2 max-w-[220px]">
-                {isMyTurn
-                  ? 'Tap an attribute on your card to challenge opponent!'
-                  : gameMode === 'ai'
-                  ? 'AI Bot is choosing an attribute...'
-                  : `Waiting for ${opponentName} to call...`}
-              </p>
-
-              <div className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-[10px] sm:text-xs text-slate-700 flex items-center gap-1.5 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                <span className="font-semibold">{isMyTurn ? 'Tap attribute below' : 'Opponent Turn'}</span>
-              </div>
+              <span className="text-[10px] sm:text-[11px] font-black uppercase text-slate-700 font-stats">
+                Clashes: <span className="text-emerald-700 font-black">{myPickWins}</span> - <span className="text-rose-700 font-black">{oppPickWins}</span>
+              </span>
             </div>
-          ) : (
-            /* Revealed Comparison Clash Card */
-            <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-3xl w-full flex flex-col items-center border-2 border-amber-400 bg-white shadow-xl clash-shaking">
-              {/* Stat Clash Indicator */}
-              <div className="flex items-center justify-center gap-2 mb-1">
-                <div 
-                  className="w-6 h-6 rounded-lg flex items-center justify-center shadow-xs"
-                  style={{ backgroundColor: activeAttrObj?.bgColor, color: activeAttrObj?.color }}
+
+            {/* 3-Pick Stepper Slots (Pick 1 -> Pick 2 -> Pick 3) */}
+            <div className="w-full flex items-stretch gap-1.5 mb-2.5">
+              {[0, 1, 2].map((slotIdx) => renderPickSlot(slotIdx))}
+            </div>
+
+            {roundStatus === 'choosing' ? (
+              <div className="w-full flex flex-col items-center">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center mb-1.5 shadow-sm text-slate-950">
+                  <Swords className="w-5 h-5 text-slate-950" />
+                </div>
+
+                <h2 className="text-sm sm:text-base font-black text-slate-900 font-stats tracking-wider uppercase mb-0.5">
+                  {isMyPick ? `Your Turn (Pick ${currentPickNumber} of 3)` : `${opponentName}'s Turn (Pick ${currentPickNumber} of 3)`}
+                </h2>
+
+                <p className="text-[11px] text-slate-600 font-semibold mb-2 max-w-[240px]">
+                  {isMyPick
+                    ? currentPickNumber === 1
+                      ? 'You have the call! Choose your 1st attribute.'
+                      : currentPickNumber === 2
+                      ? 'Your turn! Pick 2nd attribute to challenge.'
+                      : 'Final Deciding Clash! Pick your 3rd attribute.'
+                    : gameMode === 'ai'
+                    ? 'AI Bot is selecting an attribute...'
+                    : `Waiting for ${opponentName} to choose attribute...`}
+                </p>
+
+                <div className={`px-3 py-1 rounded-full border text-[10px] sm:text-xs flex items-center gap-1.5 shadow-2xs ${
+                  isMyPick
+                    ? 'bg-amber-100 border-amber-400 text-amber-900 font-black animate-pulse'
+                    : 'bg-slate-100 border-slate-200 text-slate-600'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${isMyPick ? 'bg-amber-500' : 'bg-slate-400'} animate-ping`} />
+                  <span>{isMyPick ? 'Tap unused attribute on your card' : 'Opponent Choosing'}</span>
+                </div>
+              </div>
+            ) : (
+              /* Duel Result Banner */
+              <div className="w-full flex flex-col items-center clash-shaking">
+                <div className="my-1 text-center">
+                  <h3 className={`text-sm sm:text-base font-black uppercase font-stats tracking-wide ${
+                    myWinner ? 'text-emerald-700' : opponentWinner ? 'text-rose-600' : 'text-sky-700'
+                  }`}>
+                    {myWinner ? `🎉 Duel ${roundNumber} Won! (+1 Pt)` : opponentWinner ? `❌ Duel ${roundNumber} Lost` : `⚔️ Duel Tied (0 Pts)`}
+                  </h3>
+                  <p className="text-[11px] text-slate-600 font-semibold mt-0.5">
+                    {myWinner
+                      ? `You won ${myPickWins} of 3 clashes and earn +1 Match Point!`
+                      : opponentWinner
+                      ? `${opponentName} won ${oppPickWins} of 3 clashes and earns +1 Point.`
+                      : `3-clash duel ended in a draw (${myPickWins}-${oppPickWins}).`}
+                  </p>
+                </div>
+
+                {/* Next Round Action Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    sounds.playSelect();
+                    onNextRound();
+                  }}
+                  className="mt-2.5 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-amber-400/20 transform hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer font-stats"
                 >
-                  <AttrIcon className="w-3.5 h-3.5" />
-                </div>
-                <span className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-wider font-stats">
-                  {activeAttrObj?.label} CLASH
-                </span>
+                  <span>Next Duel ({countdown}s)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
-
-              {/* Number Clash Visual */}
-              <div className="flex items-center justify-center gap-3 my-1.5">
-                <div className={`px-3 py-1.5 rounded-xl font-black font-stats text-xl flex flex-col items-center ${
-                  myWinner 
-                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30 ring-2 ring-emerald-300' 
-                    : 'bg-slate-100 text-slate-800 border border-slate-200'
-                }`}>
-                  <span className="text-[9px] uppercase font-bold tracking-wider opacity-90">{myName}</span>
-                  <span>{myCard?.stats[selectedAttribute]}</span>
-                </div>
-
-                <div className="w-7 h-7 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 flex items-center justify-center text-[11px] font-black text-slate-950 shadow-xs">
-                  VS
-                </div>
-
-                <div className={`px-3 py-1.5 rounded-xl font-black font-stats text-xl flex flex-col items-center ${
-                  opponentWinner 
-                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30 ring-2 ring-emerald-300' 
-                    : 'bg-slate-100 text-slate-800 border border-slate-200'
-                }`}>
-                  <span className="text-[9px] uppercase font-bold tracking-wider opacity-90">{opponentName}</span>
-                  <span>{opponentCard?.stats[selectedAttribute]}</span>
-                </div>
-              </div>
-
-              {/* Round Result Title */}
-              <div className="my-1 text-center">
-                <h3 className={`text-xs sm:text-sm font-black tracking-wide ${
-                  myWinner ? 'text-emerald-700' : opponentWinner ? 'text-rose-600' : 'text-sky-700'
-                }`}>
-                  {myWinner ? `🎉 You Won Duel ${roundNumber} (+1 Pt)` : opponentWinner ? `❌ ${opponentName} Won Duel ${roundNumber}` : `⚔️ Stalemate Duel (0 Pts)`}
-                </h3>
-              </div>
-
-              {/* Next Round Action Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  sounds.playSelect();
-                  onNextRound();
-                }}
-                className="mt-2 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-amber-400/20 transform hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
-              >
-                <span>Next Duel ({countdown}s)</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* RIGHT: OPPONENT CARD (Hidden on mobile while choosing to keep UI clean, visible when revealed or on desktop) */}
+        {/* RIGHT: OPPONENT CARD (Visible when revealed or on desktop; interactive on local mode when it's P2's turn) */}
         <div className={`${roundStatus === 'choosing' ? 'hidden lg:flex' : 'flex'} flex-col items-center`}>
           <div className="mb-1 flex items-center gap-2">
             <span className={`inline-flex items-center gap-1.5 text-xs font-black px-3.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
-              isOpponentTurn 
+              isOpponentPick 
                 ? 'bg-amber-400 text-slate-950 border border-amber-500' 
+                : isOpponentCall
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
                 : 'bg-white text-slate-600 border border-slate-200'
             }`}>
-              {isOpponentTurn && <Crown className="w-3.5 h-3.5 fill-current" />}
-              <span>{opponentName} {isOpponentTurn && '• CALLING'}</span>
+              {isOpponentCall && <Crown className="w-3.5 h-3.5 fill-current" />}
+              <span>{opponentName} {isOpponentPick ? '• PICKING NOW' : isOpponentCall ? '• CALLER' : ''}</span>
             </span>
           </div>
 
           <CardView
             key={`opp-${opponentCard?.id || 'empty'}`}
             card={opponentCard}
-            isInteractive={false}
+            isInteractive={gameMode === 'local' && roundStatus === 'choosing' && isOpponentPick}
             isFacedown={isOpponentFacedown}
-            onSelectAttribute={null}
+            onSelectAttribute={onSelectAttribute}
             selectedAttribute={selectedAttribute}
+            usedAttributes={usedAttributes}
+            duelPicks={duelPicks}
             isWinner={roundStatus === 'revealed' && opponentWinner}
             isLoser={roundStatus === 'revealed' && opponentLoser}
             playerName={opponentName}
-            isCurrentTurn={isOpponentTurn}
+            isCurrentTurn={isOpponentPick}
           />
         </div>
 

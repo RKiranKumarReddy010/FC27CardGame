@@ -38,7 +38,22 @@ export default function RulesModal({ onClose }) {
             </div>
             <div>
               <strong className="text-slate-900 text-sm block mb-0.5">1. 25 Cards = 25 Duels</strong>
-              Each player receives 25 cards in hand in a fixed sequence. The match consists of exactly 25 duels. You can scroll through your entire squad sequence in the tray at any time!
+              Each player receives 25 cards in a fixed sequence. The match consists of 25 duels. You can preview upcoming cards anytime in the bottom scrollable squad sequence tray.
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+              <Swords className="w-4 h-4 text-amber-700" />
+            </div>
+            <div>
+              <strong className="text-slate-900 text-sm block mb-0.5">2. 3 Attributes Picked Per Duel (1 by 1)</strong>
+              Each duel consists of 3 attribute clashes from the 6 core stats (<strong>PAC, SHO, PAS, DRI, DEF, PHY</strong>):
+              <ul className="mt-1 list-disc list-inside text-slate-700 space-y-0.5 font-medium">
+                <li><strong>Pick 1:</strong> Active Caller chooses 1st attribute.</li>
+                <li><strong>Pick 2:</strong> Opponent chooses 2nd attribute from remaining unused stats.</li>
+                <li><strong>Pick 3:</strong> Active Caller chooses 3rd attribute from remaining unused stats.</li>
+              </ul>
             </div>
           </div>
 
@@ -47,8 +62,8 @@ export default function RulesModal({ onClose }) {
               <Award className="w-4 h-4 text-amber-700" />
             </div>
             <div>
-              <strong className="text-slate-900 text-sm block mb-0.5">2. Each Duel Carries 1 Point</strong>
-              The winner of each duel earns <strong>+1 point</strong> (indicated by glowing green corners). If a duel is tied, 0 points are awarded.
+              <strong className="text-slate-900 text-sm block mb-0.5">3. 1 Point Per Duel (Majority of 3)</strong>
+              The player who wins the majority of the 3 clashes (e.g. 2–1 or 3–0) wins the duel and earns <strong>+1 Match Point</strong> (with glowing green corner indicators).
             </div>
           </div>
 
@@ -57,8 +72,8 @@ export default function RulesModal({ onClose }) {
               <Crown className="w-4 h-4 text-amber-700" />
             </div>
             <div>
-              <strong className="text-slate-900 text-sm block mb-0.5">3. Winner Retains Call Advantage</strong>
-              Whichever player wins the duel earns the right to choose the attribute for the next duel. If you lose, the corners glow red and the opponent gets the call.
+              <strong className="text-slate-900 text-sm block mb-0.5">4. Winner Strictly Calls Next Duel</strong>
+              Whichever player wins the duel gets the call for the next duel (becoming the First Picker). If you lose, the opponent gets the call.
             </div>
           </div>
 
@@ -67,8 +82,8 @@ export default function RulesModal({ onClose }) {
               <Trophy className="w-4 h-4 text-amber-700" />
             </div>
             <div>
-              <strong className="text-slate-900 text-sm block mb-0.5">4. Victory Condition</strong>
-              After all 25 duels conclude, points are tallied. The player with the <strong>most points wins the match</strong>!
+              <strong className="text-slate-900 text-sm block mb-0.5">5. Victory Condition</strong>
+              After all 25 duels conclude, the player with the <strong>most points wins the match</strong>!
             </div>
           </div>
 
