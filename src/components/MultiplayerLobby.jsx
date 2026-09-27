@@ -14,7 +14,7 @@ export default function MultiplayerLobby({
   onClose
 }) {
   const [mode, setMode] = useState('online'); // 'ai' | 'local' | 'online'
-  const [deckSize, setDeckSize] = useState(10);
+  const [deckSize, setDeckSize] = useState(25);
   const [player1Name, setPlayer1Name] = useState('Player 1');
   const [player2Name, setPlayer2Name] = useState('Player 2');
   const [joinCode, setJoinCode] = useState('');
@@ -268,18 +268,18 @@ export default function MultiplayerLobby({
                     Deck Size (Cards per player)
                   </label>
                   <div className="grid grid-cols-4 gap-2">
-                    {[5, 10, 15, 25].map((size) => (
+                    {[25, 15, 10, 5].map((size) => (
                       <button
                         key={size}
                         type="button"
                         onClick={() => setDeckSize(size)}
-                        className={`py-2 px-3 rounded-xl border text-xs font-black font-stats transition-all cursor-pointer ${
+                        className={`py-2 px-2.5 rounded-xl border text-xs font-black font-stats transition-all cursor-pointer ${
                           deckSize === size
-                            ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-sm'
+                            ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-sm ring-2 ring-amber-400/40'
                             : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
                         }`}
                       >
-                        {size} CARDS
+                        {size} {size === 25 ? 'DUELS ⭐' : 'DUELS'}
                       </button>
                     ))}
                   </div>
@@ -362,18 +362,18 @@ export default function MultiplayerLobby({
                 Cards Per Player Deck
               </label>
               <div className="grid grid-cols-4 gap-2">
-                {[5, 10, 15, 25].map((size) => (
+                {[25, 15, 10, 5].map((size) => (
                   <button
                     key={size}
                     type="button"
                     onClick={() => { sounds.playHover(); setDeckSize(size); }}
-                    className={`py-2 px-3 rounded-xl border text-xs font-black font-stats transition-all cursor-pointer ${
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-black font-stats transition-all cursor-pointer ${
                       deckSize === size
-                        ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-sm'
+                        ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-sm ring-2 ring-amber-400/40'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
                     }`}
                   >
-                    {size} CARDS
+                    {size} {size === 25 ? 'DUELS ⭐' : 'DUELS'}
                   </button>
                 ))}
               </div>

@@ -25,7 +25,7 @@ class MultiplayerClient {
     this.isHost = false;
     this.playerName = '';
     this.playerNumber = 1;
-    this.deckSize = 10;
+    this.deckSize = 25;
     this.callbacks = {};
     this.isSocketConnected = false;
     this.p2pGameState = null;
@@ -55,7 +55,6 @@ class MultiplayerClient {
       });
 
       this.socket.on('connect', () => {
-        console.log('✅ Connected to FC Clash Game Server:', this.socket.id);
         this.isSocketConnected = true;
         if (this.callbacks.onServerStatus) {
           this.callbacks.onServerStatus('Connected to Dedicated Server');
@@ -115,7 +114,7 @@ class MultiplayerClient {
     return code;
   }
 
-  dealCards(deckSize = 10) {
+  dealCards(deckSize = 25) {
     const shuffled = [...playersData].sort(() => 0.5 - Math.random());
     const p1Cards = shuffled.slice(0, deckSize);
     const p2Cards = shuffled.slice(deckSize, deckSize * 2);
@@ -137,9 +136,9 @@ class MultiplayerClient {
     }
   }
 
-  createRoom({ playerName, deckSize = 10 }, onResult) {
+  createRoom({ playerName, deckSize = 25 }, onResult) {
     this.playerName = playerName || 'Player 1';
-    this.deckSize = Number(deckSize) || 10;
+    this.deckSize = Number(deckSize) || 25;
     this.playerNumber = 1;
     this.isHost = true;
     this.cleanupConnections();
@@ -271,7 +270,6 @@ class MultiplayerClient {
 
     console.log(`Connecting to room ${code} as ${this.playerName}`);
 
-    // If socket server is active, try it first
     this.initSocket();
     if (this.socket && this.socket.connected) {
       this.socket.emit('join-room', { roomCode: code, playerName: this.playerName }, (res) => {
@@ -285,7 +283,6 @@ class MultiplayerClient {
       return;
     }
 
-    // Connect via PeerJS WebRTC P2P
     this.joinViaPeer(code, onResult);
   }
 
@@ -387,7 +384,7 @@ class MultiplayerClient {
       case 'GUEST_JOINED': {
         if (!this.isHost) return;
         const guestName = data.guestName || 'Player 2';
-        console.log(`Player 2 (${guestName}) joined! Starting match...`);
+        console.log(`Player 2 (${guestName}) joined! Starting match with ${this.deckSize} duels...`);
 
         const { p1Cards, p2Cards } = this.dealCards(this.deckSize);
 
@@ -399,7 +396,9 @@ class MultiplayerClient {
         this.p2pGameState = {
           player1Deck: p1Cards,
           player2Deck: p2Cards,
-          warPot: [],
+          player1Score: 0,
+          player2Score: 0,
+          totalDuels: this.deckSize,
           roundNumber: 1,
           activePlayer: 1,
           roundStatus: 'choosing',
@@ -479,6 +478,7 @@ class MultiplayerClient {
     }
   }
 
+  // 1 Duel = 1 Point
   evaluateAttributeChoice(attribute) {
     if (!this.p2pGameState) return;
     const gameState = this.p2pGameState;
@@ -499,24 +499,18 @@ class MultiplayerClient {
 
     if (p1Val > p2Val) {
       gameState.roundWinner = 1;
+      gameState.player1Score = (gameState.player1Score || 0) + 1;
       gameState.roundResultText = `🔥 ${p1Card.name} (${p1Val} ${attrUpper}) beats ${p2Card.name} (${p2Val} ${attrUpper})!`;
-      if (gameState.activePlayer === 1) {
-        gameState.turnResultText = `🎉 ${p1Name} wins & gets another chance to choose!`;
-      } else {
-        gameState.turnResultText = `⚡ ${p1Name} wins & takes the call from ${p2Name}!`;
-      }
+      gameState.turnResultText = `🎉 ${p1Name} wins Duel ${gameState.roundNumber} (+1 Pt) & retains the call!`;
     } else if (p2Val > p1Val) {
       gameState.roundWinner = 2;
+      gameState.player2Score = (gameState.player2Score || 0) + 1;
       gameState.roundResultText = `⚡ ${p2Card.name} (${p2Val} ${attrUpper}) beats ${p1Card.name} (${p1Val} ${attrUpper})!`;
-      if (gameState.activePlayer === 2) {
-        gameState.turnResultText = `🎉 ${p2Name} wins & gets another chance to choose!`;
-      } else {
-        gameState.turnResultText = `⚡ ${p2Name} wins & takes the call from ${p1Name}!`;
-      }
+      gameState.turnResultText = `🎉 ${p2Name} wins Duel ${gameState.roundNumber} (+1 Pt) & takes the call!`;
     } else {
       gameState.roundWinner = 'tie';
       gameState.roundResultText = `⚔️ Stalemate! Both cards matched with ${p1Val} ${attrUpper}!`;
-      gameState.turnResultText = `Cards added to the War Pot. ${gameState.activePlayer === 1 ? p1Name : p2Name} calls from the next card!`;
+      gameState.turnResultText = `Duel ${gameState.roundNumber} tied (0 pts). Call stays with ${gameState.activePlayer === 1 ? p1Name : p2Name}!`;
     }
 
     if (this.callbacks.onRoundRevealed) {
@@ -529,53 +523,38 @@ class MultiplayerClient {
     });
   }
 
+  // Next round consumes 1 card per duel
   advanceRound() {
     if (!this.p2pGameState) return;
     const gameState = this.p2pGameState;
     if (gameState.roundStatus !== 'revealed') return;
 
-    const p1Card = gameState.player1Deck[0];
-    const p2Card = gameState.player2Deck[0];
-    if (!p1Card || !p2Card) return;
-
     const p1Remaining = gameState.player1Deck.slice(1);
     const p2Remaining = gameState.player2Deck.slice(1);
 
-    let nextP1Deck = [...p1Remaining];
-    let nextP2Deck = [...p2Remaining];
-    let nextWarPot = [...gameState.warPot];
-    let nextActive = gameState.activePlayer;
+    gameState.player1Deck = p1Remaining;
+    gameState.player2Deck = p2Remaining;
 
-    if (gameState.roundWinner === 1) {
-      nextP1Deck = [...p1Remaining, p1Card, p2Card, ...gameState.warPot];
-      nextWarPot = [];
-      nextActive = 1;
-    } else if (gameState.roundWinner === 2) {
-      nextP2Deck = [...p2Remaining, p2Card, p1Card, ...gameState.warPot];
-      nextWarPot = [];
-      nextActive = 2;
+    // Check if 25 duels have finished
+    if (p1Remaining.length === 0 || p2Remaining.length === 0) {
+      gameState.isGameOver = true;
+      const s1 = gameState.player1Score || 0;
+      const s2 = gameState.player2Score || 0;
+      if (s1 > s2) {
+        gameState.matchWinner = this.players[0]?.name || 'Player 1';
+      } else if (s2 > s1) {
+        gameState.matchWinner = this.players[1]?.name || 'Player 2';
+      } else {
+        gameState.matchWinner = 'Honorable Draw';
+      }
     } else {
-      nextWarPot = [...gameState.warPot, p1Card, p2Card];
-      nextActive = gameState.activePlayer;
-    }
-
-    gameState.player1Deck = nextP1Deck;
-    gameState.player2Deck = nextP2Deck;
-    gameState.warPot = nextWarPot;
-    gameState.roundNumber += 1;
-    gameState.activePlayer = nextActive;
-    gameState.roundStatus = 'choosing';
-    gameState.selectedAttribute = null;
-    gameState.roundWinner = null;
-    gameState.roundResultText = '';
-    gameState.turnResultText = '';
-
-    if (nextP1Deck.length === 0) {
-      gameState.isGameOver = true;
-      gameState.matchWinner = this.players[1]?.name || 'Player 2';
-    } else if (nextP2Deck.length === 0) {
-      gameState.isGameOver = true;
-      gameState.matchWinner = this.players[0]?.name || 'Player 1';
+      gameState.roundNumber += 1;
+      gameState.activePlayer = gameState.roundWinner === 1 ? 1 : gameState.roundWinner === 2 ? 2 : gameState.activePlayer;
+      gameState.roundStatus = 'choosing';
+      gameState.selectedAttribute = null;
+      gameState.roundWinner = null;
+      gameState.roundResultText = '';
+      gameState.turnResultText = '';
     }
 
     if (this.callbacks.onRoundAdvanced) {
@@ -633,7 +612,9 @@ class MultiplayerClient {
       this.p2pGameState = {
         player1Deck: p1Cards,
         player2Deck: p2Cards,
-        warPot: [],
+        player1Score: 0,
+        player2Score: 0,
+        totalDuels: this.deckSize,
         roundNumber: 1,
         activePlayer: 1,
         roundStatus: 'choosing',

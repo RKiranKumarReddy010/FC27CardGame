@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Shield, Swords, Crown, Lock, Flame, Scale, Trophy, Sparkles } from 'lucide-react';
+import { X, Shield, Swords, Crown, Trophy, Sparkles, Award } from 'lucide-react';
 
 export default function RulesModal({ onClose }) {
   return (
@@ -17,14 +17,14 @@ export default function RulesModal({ onClose }) {
         {/* Title */}
         <div className="flex items-center gap-3 mb-5">
           <div className="w-11 h-11 rounded-2xl bg-amber-400 flex items-center justify-center text-slate-950 font-black shadow-md shadow-amber-400/20">
-            <Shield className="w-6 h-6 text-slate-950" />
+            <Trophy className="w-6 h-6 text-slate-950" />
           </div>
           <div>
             <h2 className="text-2xl font-black text-slate-900 font-stats tracking-wider uppercase">
-              FC Top Trumps Rules
+              FC Match Regulations
             </h2>
             <p className="text-xs text-amber-700 font-bold">
-              Official Card Duel Regulations
+              25 Duels • 1 Point Per Duel • Most Points Wins
             </p>
           </div>
         </div>
@@ -32,13 +32,23 @@ export default function RulesModal({ onClose }) {
         {/* Rules Breakdown */}
         <div className="space-y-3 text-xs sm:text-sm text-slate-600 leading-relaxed">
           
-          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
-              <Lock className="w-4 h-4 text-amber-700" />
+          <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-300 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-400 flex items-center justify-center shrink-0 mt-0.5 text-slate-950 font-black font-stats">
+              25
             </div>
             <div>
-              <strong className="text-slate-900 text-sm block mb-0.5">1. Strict No-Shuffle Decks</strong>
-              Both players receive their dealt cards in a fixed sequence. Players cannot shuffle or reorder their decks. Each duel is fought with the top card drawn!
+              <strong className="text-slate-900 text-sm block mb-0.5">1. 25 Cards = 25 Duels</strong>
+              Each player receives 25 cards in hand in a fixed sequence. The match consists of exactly 25 duels. You can scroll through your entire squad sequence in the tray at any time!
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+              <Award className="w-4 h-4 text-amber-700" />
+            </div>
+            <div>
+              <strong className="text-slate-900 text-sm block mb-0.5">2. Each Duel Carries 1 Point</strong>
+              The winner of each duel earns <strong>+1 point</strong> (indicated by glowing green corners). If a duel is tied, 0 points are awarded.
             </div>
           </div>
 
@@ -47,38 +57,8 @@ export default function RulesModal({ onClose }) {
               <Crown className="w-4 h-4 text-amber-700" />
             </div>
             <div>
-              <strong className="text-slate-900 text-sm block mb-0.5">2. Only One Chooser at a Time</strong>
-              Only the active player ("Caller") can choose an attribute on their card. The other player must wait and keep their card face down until the attribute is called.
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
-              <Swords className="w-4 h-4 text-amber-700" />
-            </div>
-            <div>
-              <strong className="text-slate-900 text-sm block mb-0.5">3. Higher Attribute Takes the Cards</strong>
-              Once the attribute is chosen (OVR, PAC, SHO, PAS, DRI, DEF, PHY), both cards are revealed. The player with the higher attribute rating wins the round and claims both cards, placing them at the bottom of their deck.
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
-              <Flame className="w-4 h-4 text-amber-700" />
-            </div>
-            <div>
-              <strong className="text-slate-900 text-sm block mb-0.5">4. Winner Gets Another Chance to Choose</strong>
-              If you win the round, you retain the caller privilege and get another chance to pick the attribute on your next card! If your opponent beats you, the call transfers to them.
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
-              <Scale className="w-4 h-4 text-amber-700" />
-            </div>
-            <div>
-              <strong className="text-slate-900 text-sm block mb-0.5">5. Ties Enter the War Pot</strong>
-              If both cards have the exact same attribute rating, the cards are placed into the center War Pot. The same player calls from their next card. The winner of that duel wins all cards in the War Pot!
+              <strong className="text-slate-900 text-sm block mb-0.5">3. Winner Retains Call Advantage</strong>
+              Whichever player wins the duel earns the right to choose the attribute for the next duel. If you lose, the corners glow red and the opponent gets the call.
             </div>
           </div>
 
@@ -87,20 +67,20 @@ export default function RulesModal({ onClose }) {
               <Trophy className="w-4 h-4 text-amber-700" />
             </div>
             <div>
-              <strong className="text-slate-900 text-sm block mb-0.5">6. Match Victory</strong>
-              When one player captures all the cards (leaving their opponent with 0 cards in their deck), they are crowned the Ultimate FC Champion!
+              <strong className="text-slate-900 text-sm block mb-0.5">4. Victory Condition</strong>
+              After all 25 duels conclude, points are tallied. The player with the <strong>most points wins the match</strong>!
             </div>
           </div>
 
         </div>
 
+        {/* Dismiss Button */}
         <button
           onClick={onClose}
-          className="mt-5 w-full py-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase font-stats text-sm tracking-wider cursor-pointer shadow-md shadow-amber-400/20"
+          className="mt-6 w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-sm uppercase tracking-wider font-stats shadow-md shadow-amber-400/20 cursor-pointer"
         >
-          Got It, Let's Play!
+          Got It, Back To Match
         </button>
-
       </div>
     </div>
   );
